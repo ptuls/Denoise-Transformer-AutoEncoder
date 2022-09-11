@@ -4,7 +4,7 @@ from sklearn.preprocessing import OneHotEncoder
 from torch.utils.data import Dataset
 
 
-def get_data():
+def get_data() -> tuple[np.array, np.array, float, float]:
     train_data = pd.read_csv("data/train.csv")
     test_data = pd.read_csv("data/test.csv")
 
@@ -21,14 +21,14 @@ def get_data():
 
 
 class SingleDataset(Dataset):
-    def __init__(self, x, is_sparse=False):
+    def __init__(self, x: np.array, is_sparse: bool = False):
         self.x = x.astype("float32")
         self.is_sparse = is_sparse
 
-    def __len__(self):
+    def __len__(self) -> float:
         return self.x.shape[0]
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> np.array:
         x = self.x[index]
         if self.is_sparse:
             x = x.toarray().squeeze()
