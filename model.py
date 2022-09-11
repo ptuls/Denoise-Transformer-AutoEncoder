@@ -14,7 +14,7 @@ class TransformerEncoder(torch.nn.Module):
         self.linear_2 = torch.nn.Linear(feedforward_dim, embed_dim)
         self.layernorm_1 = torch.nn.LayerNorm(embed_dim)
         self.layernorm_2 = torch.nn.LayerNorm(embed_dim)
-    
+
     def forward(self, x_in):
         attn_out, _ = self.attn(x_in, x_in, x_in)
         x = self.layernorm_1(x_in + attn_out)
@@ -25,20 +25,20 @@ class TransformerEncoder(torch.nn.Module):
 
 class TransformerAutoEncoder(torch.nn.Module):
     def __init__(
-            self, 
-            num_inputs, 
-            n_cats, 
-            n_nums, 
-            hidden_size=1024, 
-            num_subspaces=8,
-            embed_dim=128, 
-            num_heads=8, 
-            dropout=0, 
-            feedforward_dim=512, 
-            emphasis=.75, 
-            task_weights=[10, 14],
-            mask_loss_weight=2,
-        ):
+        self,
+        num_inputs,
+        n_cats,
+        n_nums,
+        hidden_size=1024,
+        num_subspaces=8,
+        embed_dim=128,
+        num_heads=8,
+        dropout=0,
+        feedforward_dim=512,
+        emphasis=0.75,
+        task_weights=[10, 14],
+        mask_loss_weight=2,
+    ):
         super().__init__()
         assert hidden_size == embed_dim * num_subspaces
         self.n_cats = n_cats
@@ -54,9 +54,11 @@ class TransformerAutoEncoder(torch.nn.Module):
         self.encoder_1 = TransformerEncoder(embed_dim, num_heads, dropout, feedforward_dim)
         self.encoder_2 = TransformerEncoder(embed_dim, num_heads, dropout, feedforward_dim)
         self.encoder_3 = TransformerEncoder(embed_dim, num_heads, dropout, feedforward_dim)
-        
+
         self.mask_predictor = torch.nn.Linear(in_features=hidden_size, out_features=num_inputs)
-        self.reconstructor = torch.nn.Linear(in_features=hidden_size + num_inputs, out_features=num_inputs)
+        self.reconstructor = torch.nn.Linear(
+            in_features=hidden_size + num_inputs, out_features=num_inputs
+        )
 
     def divide(self, x):
         batch_size = x.shape[0]
@@ -70,13 +72,13 @@ class TransformerAutoEncoder(torch.nn.Module):
 
     def forward(self, x):
         x = torch.nn.functional.relu(self.excite(x))
-        
+
         x = self.divide(x)
         x1 = self.encoder_1(x)
         x2 = self.encoder_2(x1)
         x3 = self.encoder_3(x2)
         x = self.combine(x3)
-        
+
         predicted_mask = self.mask_predictor(x)
         reconstruction = self.reconstructor(torch.cat([x, predicted_mask], dim=1))
         return (x1, x2, x3), (reconstruction, predicted_mask)
@@ -88,19 +90,29 @@ class TransformerAutoEncoder(torch.nn.Module):
         attn_outs, _ = self.forward(x)
         return torch.cat([self.combine(x) for x in attn_outs], dim=1)
 
-    def loss(self, x, y, mask, reduction='mean'):
+    def loss(self, x, y, mask, reduction="mean"):
         _, (reconstruction, predicted_mask) = self.forward(x)
         x_cats, x_nums = self.split(reconstruction)
         y_cats, y_nums = self.split(y)
         w_cats, w_nums = self.split(mask * self.emphasis + (1 - mask) * (1 - self.emphasis))
 
-        cat_loss = self.task_weights[0] * torch.mul(w_cats, bce_logits(x_cats, y_cats, reduction='none'))
-        num_loss = self.task_weights[1] * torch.mul(w_nums, mse(x_nums, y_nums, reduction='none'))
+        cat_loss = self.task_weights[0] * torch.mul(
+            w_cats, bce_logits(x_cats, y_cats, reduction="none")
+        )
+        num_loss = self.task_weights[1] * torch.mul(w_nums, mse(x_nums, y_nums, reduction="none"))
 
-        reconstruction_loss = torch.cat([cat_loss, num_loss], dim=1) if reduction == 'none' else cat_loss.mean() + num_loss.mean()
+        reconstruction_loss = (
+            torch.cat([cat_loss, num_loss], dim=1)
+            if reduction == "none"
+            else cat_loss.mean() + num_loss.mean()
+        )
         mask_loss = self.mask_loss_weight * bce_logits(predicted_mask, mask, reduction=reduction)
 
-        return reconstruction_loss + mask_loss if reduction == 'mean' else [reconstruction_loss, mask_loss]
+        return (
+            reconstruction_loss + mask_loss
+            if reduction == "mean"
+            else [reconstruction_loss, mask_loss]
+        )
 
 
 class SwapNoiseMasker(object):
@@ -115,7 +127,7 @@ class SwapNoiseMasker(object):
 
 
 def test_tf_encoder():
-    m = TransformerEncoder(4, 2, .1, 16)
+    m = TransformerEncoder(4, 2, 0.1, 16)
     x = torch.rand((32, 8))
     x = x.reshape((32, 2, 4)).permute((1, 0, 2))
     o = m(x)
@@ -123,26 +135,26 @@ def test_tf_encoder():
 
 
 def test_dae_model():
-    m = TransformerAutoEncoder(5, 2, 3, 16, 4, 4, 2, .1, 4, .75)
+    m = TransformerAutoEncoder(5, 2, 3, 16, 4, 4, 2, 0.1, 4, 0.75)
     x = torch.cat([torch.randint(0, 2, (5, 2)), torch.rand((5, 3))], dim=1)
     f = m.feature(x)
     assert f.shape == torch.Size([5, 16 * 3])
-    loss = m.loss(x, x, (x > .2).float())
+    loss = m.loss(x, x, (x > 0.2).float())
 
 
 def test_swap_noise():
-    probas = [.2, .5, .8]
+    probas = [0.2, 0.5, 0.8]
     m = SwapNoiseMasker(probas)
     diffs = []
     for i in range(1000):
         x = torch.rand((32, 3))
         noisy_x, _ = m.apply(x)
-        diffs.append((x != noisy_x).float().mean(0).unsqueeze(0)) 
+        diffs.append((x != noisy_x).float().mean(0).unsqueeze(0))
 
-    print('specified : ', probas, ' - actual : ', torch.cat(diffs, 0).mean(0))
+    print("specified : ", probas, " - actual : ", torch.cat(diffs, 0).mean(0))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_tf_encoder()
     test_dae_model()
     test_swap_noise()

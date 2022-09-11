@@ -18,37 +18,30 @@ model_params = dict(
     num_heads=8,
     dropout=0,
     feedforward_dim=512,
-    emphasis=.75,
-    mask_loss_weight=2
+    emphasis=0.75,
+    mask_loss_weight=2,
 )
 batch_size = 384
 init_lr = 3e-4
-lr_decay = .998
+lr_decay = 0.998
 max_epochs = 2001
 
-repeats = [  2,  2,  2,  4,  4,  4,  8,  8,  7, 15,  14]
-probas =  [.95, .4, .7, .9, .9, .9, .9, .9, .9, .9, .25]
+repeats = [2, 2, 2, 4, 4, 4, 8, 8, 7, 15, 14]
+probas = [0.95, 0.4, 0.7, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.25]
 swap_probas = sum([[p] * r for p, r in zip(probas, repeats)], [])
 
 #  get data
 X, Y, n_cats, n_nums = get_data()
 
 train_dl = DataLoader(
-    dataset=SingleDataset(X),
-    batch_size=batch_size,
-    shuffle=True,
-    pin_memory=True,
-    drop_last=True
+    dataset=SingleDataset(X), batch_size=batch_size, shuffle=True, pin_memory=True, drop_last=True
 )
 
 # setup model
 model = TransformerAutoEncoder(
-    num_inputs=X.shape[1],
-    n_cats=n_cats,
-    n_nums=n_nums,
-    **model_params
+    num_inputs=X.shape[1], n_cats=n_cats, n_nums=n_nums, **model_params
 ).cuda()
-model_checkpoint = 'model_checkpoint.pth'
+model_checkpoint = "model_checkpoint.pth"
 
 print(model)
 
@@ -73,19 +66,26 @@ for epoch in range(max_epochs):
 
     delta = (datetime.now() - t0).seconds
     scheduler.step()
-    print('\r epoch {:5d} - loss {:.6f} - {:4.6f} sec per epoch'.format(epoch, meter.avg, delta), end='')
+    print(
+        "\r epoch {:5d} - loss {:.6f} - {:4.6f} sec per epoch".format(epoch, meter.avg, delta),
+        end="",
+    )
 
-torch.save({
+torch.save(
+    {
         "optimizer": optimizer.state_dict(),
         "scheduler": scheduler.state_dict(),
-        "model": model.state_dict()
-    }, model_checkpoint
+        "model": model.state_dict(),
+    },
+    model_checkpoint,
 )
 model_state = torch.load(model_checkpoint)
-model.load_state_dict(model_state['model'])
+model.load_state_dict(model_state["model"])
 
 # extract features
-dl = DataLoader(dataset=SingleDataset(X), batch_size=1024, shuffle=False, pin_memory=True, drop_last=False)
+dl = DataLoader(
+    dataset=SingleDataset(X), batch_size=1024, shuffle=False, pin_memory=True, drop_last=False
+)
 features = []
 model.eval()
 with torch.no_grad():
@@ -94,12 +94,17 @@ with torch.no_grad():
 features = np.vstack(features)
 
 # downstream supervised regressor
-alpha = 1250 # 1000
+alpha = 1250  # 1000
 X = features[:300_000, :]
 scores = []
 for train_idx, valid_idx in KFold().split(X, Y):
-    scores.append(mean_squared_error(Y[valid_idx], Ridge(alpha=1250).fit(X[train_idx], Y[train_idx]).predict(X[valid_idx]), squared=False))
+    scores.append(
+        mean_squared_error(
+            Y[valid_idx],
+            Ridge(alpha=1250).fit(X[train_idx], Y[train_idx]).predict(X[valid_idx]),
+            squared=False,
+        )
+    )
 print(np.mean(scores))
 
-np.save('dae_features.npy', features)
-
+np.save("dae_features.npy", features)
