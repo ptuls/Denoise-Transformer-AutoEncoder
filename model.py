@@ -77,12 +77,14 @@ class TransformerAutoEncoder(torch.nn.Module):
         x = x.reshape((batch_size, self.num_subspaces, self.embed_dim)).permute((1, 0, 2))
         return x
 
-    def combine(self, x) -> torch.Tensor:
+    def combine(self, x: torch.Tensor) -> torch.Tensor:
         batch_size = x.shape[1]
         x = x.permute((1, 0, 2)).reshape((batch_size, -1))
         return x
 
-    def forward(self, x) -> tuple[list[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+    def forward(
+        self, x: torch.Tensor
+    ) -> tuple[list[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         x = torch.nn.functional.relu(self.excite(x))
         enc = []
         x = self.divide(x)
@@ -95,14 +97,16 @@ class TransformerAutoEncoder(torch.nn.Module):
         reconstruction = self.reconstructor(torch.cat([x, predicted_mask], dim=1))
         return enc, (reconstruction, predicted_mask)
 
-    def split(self, t) -> torch.Tensor:
+    def split(self, t: torch.Tensor) -> torch.Tensor:
         return torch.split(t, [self.n_cats, self.n_nums], dim=1)
 
-    def feature(self, x) -> torch.Tensor:
+    def feature(self, x: torch.Tensor) -> torch.Tensor:
         attn_outs, _ = self.forward(x)
         return torch.cat([self.combine(x) for x in attn_outs], dim=1)
 
-    def loss(self, x, y, mask, reduction="mean") -> Union[float, list[float, float]]:
+    def loss(
+        self, x: torch.Tensor, y: torch.Tensor, mask: torch.Tensor, reduction: str = "mean"
+    ) -> Union[float, list[float, float]]:
         _, (reconstruction, predicted_mask) = self.forward(x)
         x_cats, x_nums = self.split(reconstruction)
         y_cats, y_nums = self.split(y)
