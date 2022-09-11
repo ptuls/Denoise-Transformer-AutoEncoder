@@ -65,7 +65,7 @@ class TransformerAutoEncoder(torch.nn.Module):
 
         self.encoders = []
         for i in range(self.num_encoders):
-            self.encoders[i] = TransformerEncoder(embed_dim, num_heads, dropout, feedforward_dim)
+            self.encoders.append(TransformerEncoder(embed_dim, num_heads, dropout, feedforward_dim))
 
         self.mask_predictor = torch.nn.Linear(in_features=hidden_size, out_features=num_inputs)
         self.reconstructor = torch.nn.Linear(
@@ -88,7 +88,7 @@ class TransformerAutoEncoder(torch.nn.Module):
         x = torch.nn.functional.relu(self.excite(x))
         enc = []
         x = self.divide(x)
-        enc[0] = x
+        enc[0] = self.encoders[0](x)
         for i in range(1, self.num_encoders):
             enc[i] = self.encoders[i](enc[i - 1])
         x = self.combine(enc[self.num_encoders - 1])

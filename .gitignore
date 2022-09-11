@@ -3,3 +3,7 @@ __pycache__
 data/
 *.npy
 *.pth
+
+*.csv
+*.iml
+.idea/
