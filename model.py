@@ -3,7 +3,7 @@ import numpy as np
 import torch.nn.functional as F
 
 from loguru import logger
-from typing import Union
+from typing import Union, List, Tuple
 
 
 bce_logits = F.binary_cross_entropy_with_logits
@@ -46,7 +46,7 @@ class TransformerAutoEncoder(torch.nn.Module):
         dropout: float = 0.0,
         feedforward_dim: int = 512,
         emphasis: float = 0.75,
-        task_weights: list[float] = [10, 14],
+        task_weights: List[float] = [10, 14],
         mask_loss_weight: int = 2,
     ):
         super().__init__()
@@ -87,13 +87,13 @@ class TransformerAutoEncoder(torch.nn.Module):
 
     def forward(
         self, x: torch.Tensor
-    ) -> tuple[list[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+    ) -> Tuple[List[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         x = F.relu(self.excite(x))
-        enc = []
+
         x = self.divide(x)
-        enc[0] = self.encoders[0](x)
+        enc = [self.encoders[0](x)]
         for i in range(1, self.num_encoders):
-            enc[i] = self.encoders[i](enc[i - 1])
+            enc.append(self.encoders[i](enc[i - 1]))
         x = self.combine(enc[self.num_encoders - 1])
 
         predicted_mask = self.mask_predictor(x)
@@ -110,7 +110,7 @@ class TransformerAutoEncoder(torch.nn.Module):
 
     def loss(
         self, x: torch.Tensor, y: torch.Tensor, mask: torch.Tensor, reduction: str = "mean"
-    ) -> Union[float, list[float, float]]:
+    ):
         _, (reconstruction, predicted_mask) = self.forward(x)
         x_cats, x_nums = self.split(reconstruction)
         y_cats, y_nums = self.split(y)
@@ -139,9 +139,9 @@ class SwapNoiseMasker(object):
     def __init__(self, probas: np.array):
         self.probas = torch.from_numpy(np.array(probas))
 
-    def apply(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def apply(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         should_swap = torch.bernoulli(self.probas.to(x.device) * torch.ones(x.shape).to(x.device))
-        corrupted_x = torch.where(should_swap == 1, x[torch.randperm(x.shape[0])], x)
+        corrupted_x = torch.where(should_swap == 1, x[torch.randperm(x.shape[0])], x).to(x.device)
         mask = (corrupted_x != x).float()
         return corrupted_x, mask
 

@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from datetime import datetime
+
 from loguru import logger
 from util import AverageMeter
 from model import SwapNoiseMasker, TransformerAutoEncoder

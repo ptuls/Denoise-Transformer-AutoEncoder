@@ -2,9 +2,10 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 from torch.utils.data import Dataset
+from typing import Tuple
 
 
-def get_data() -> tuple[np.array, np.array, float, float]:
+def get_data() -> Tuple[np.array, np.array, float, float]:
     train_data = pd.read_csv("data/train.csv")
     test_data = pd.read_csv("data/test.csv")
 
