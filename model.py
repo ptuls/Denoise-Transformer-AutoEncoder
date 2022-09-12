@@ -28,26 +28,20 @@ class TransformerEncoder(torch.nn.Module):
 
 
 class TransformerAutoEncoder(torch.nn.Module):
-    """
-    Takes in numerical and categorical features to learn a latent space of the
-    tabular dataset.
-    """
-
     def __init__(
         self,
-        num_inputs: int,
-        n_cats: int,
-        n_nums: int,
-        num_encoders: int = 3,
-        hidden_size: int = 1024,
-        num_subspaces: int = 8,
-        embed_dim: int = 128,
-        num_heads: int = 8,
-        dropout: float = 0.0,
-        feedforward_dim: int = 512,
-        emphasis: float = 0.75,
-        task_weights: List[float] = [10, 14],
-        mask_loss_weight: int = 2,
+        num_inputs,
+        n_cats,
+        n_nums,
+        hidden_size=1024,
+        num_subspaces=8,
+        embed_dim=128,
+        num_heads=8,
+        dropout=0,
+        feedforward_dim=512,
+        emphasis=0.75,
+        task_weights=[10, 14],
+        mask_loss_weight=2,
     ):
         super().__init__()
         assert hidden_size == embed_dim * num_subspaces
@@ -61,56 +55,46 @@ class TransformerAutoEncoder(torch.nn.Module):
         self.mask_loss_weight = mask_loss_weight
 
         self.excite = torch.nn.Linear(in_features=num_inputs, out_features=hidden_size)
-        if num_encoders > 0:
-            self.num_encoders = num_encoders
-        else:
-            raise ValueError("number of encoders has to be at least 1")
-
-        self.encoders = []
-        for i in range(self.num_encoders):
-            self.encoders.append(TransformerEncoder(embed_dim, num_heads, dropout, feedforward_dim))
+        self.encoder_1 = TransformerEncoder(embed_dim, num_heads, dropout, feedforward_dim)
+        self.encoder_2 = TransformerEncoder(embed_dim, num_heads, dropout, feedforward_dim)
+        self.encoder_3 = TransformerEncoder(embed_dim, num_heads, dropout, feedforward_dim)
 
         self.mask_predictor = torch.nn.Linear(in_features=hidden_size, out_features=num_inputs)
         self.reconstructor = torch.nn.Linear(
             in_features=hidden_size + num_inputs, out_features=num_inputs
         )
 
-    def divide(self, x: torch.Tensor) -> torch.Tensor:
+    def divide(self, x):
         batch_size = x.shape[0]
         x = x.reshape((batch_size, self.num_subspaces, self.embed_dim)).permute((1, 0, 2))
         return x
 
-    def combine(self, x: torch.Tensor) -> torch.Tensor:
+    def combine(self, x):
         batch_size = x.shape[1]
         x = x.permute((1, 0, 2)).reshape((batch_size, -1))
         return x
 
-    def forward(
-        self, x: torch.Tensor
-    ) -> Tuple[List[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
-        x = F.relu(self.excite(x))
+    def forward(self, x):
+        x = torch.nn.functional.relu(self.excite(x))
 
         x = self.divide(x)
-        enc = [self.encoders[0](x)]
-        for i in range(1, self.num_encoders):
-            enc.append(self.encoders[i](enc[i - 1]))
-        x = self.combine(enc[self.num_encoders - 1])
+        x1 = self.encoder_1(x)
+        x2 = self.encoder_2(x1)
+        x3 = self.encoder_3(x2)
+        x = self.combine(x3)
 
         predicted_mask = self.mask_predictor(x)
-        # single linear layer for decoding
         reconstruction = self.reconstructor(torch.cat([x, predicted_mask], dim=1))
-        return enc, (reconstruction, predicted_mask)
+        return (x1, x2, x3), (reconstruction, predicted_mask)
 
-    def split(self, t: torch.Tensor) -> torch.Tensor:
+    def split(self, t):
         return torch.split(t, [self.n_cats, self.n_nums], dim=1)
 
-    def feature(self, x: torch.Tensor) -> torch.Tensor:
+    def feature(self, x):
         attn_outs, _ = self.forward(x)
         return torch.cat([self.combine(x) for x in attn_outs], dim=1)
 
-    def loss(
-        self, x: torch.Tensor, y: torch.Tensor, mask: torch.Tensor, reduction: str = "mean"
-    ):
+    def loss(self, x, y, mask, reduction="mean"):
         _, (reconstruction, predicted_mask) = self.forward(x)
         x_cats, x_nums = self.split(reconstruction)
         y_cats, y_nums = self.split(y)
