@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from datetime import datetime
+from loguru import logger
 from util import AverageMeter
 from model import SwapNoiseMasker, TransformerAutoEncoder
 from data import get_data, SingleDataset
@@ -48,7 +49,7 @@ def main():
     ).cuda()
     model_checkpoint = "model_checkpoint.pth"
 
-    print(model)
+    logger.info(model)
 
     noise_maker = SwapNoiseMasker(swap_probas)
     optimizer = torch.optim.Adam(model.parameters(), lr=init_lr)
@@ -71,7 +72,7 @@ def main():
 
         delta = (datetime.now() - t0).seconds
         scheduler.step()
-        print(
+        logger.info(
             "\r epoch {:5d} - loss {:.6f} - {:4.6f} sec per epoch".format(epoch, meter.avg, delta),
             end="",
         )
@@ -110,7 +111,7 @@ def main():
                 squared=False,
             )
         )
-    print(np.mean(scores))
+    logger.info(np.mean(scores))
 
     np.save("dae_features.npy", features)
 

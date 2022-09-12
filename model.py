@@ -1,10 +1,13 @@
 import torch
 import numpy as np
+import torch.nn.functional as F
+
+from loguru import logger
 from typing import Union
 
 
-bce_logits = torch.nn.functional.binary_cross_entropy_with_logits
-mse = torch.nn.functional.mse_loss
+bce_logits = F.binary_cross_entropy_with_logits
+mse = F.mse_loss
 
 
 class TransformerEncoder(torch.nn.Module):
@@ -19,7 +22,7 @@ class TransformerEncoder(torch.nn.Module):
     def forward(self, x_in: torch.Tensor) -> torch.Tensor:
         attn_out, _ = self.attn(x_in, x_in, x_in)
         x = self.layernorm1(x_in + attn_out)
-        ff_out = self.linear2(torch.nn.functional.relu(self.linear1(x)))
+        ff_out = self.linear2(F.relu(self.linear1(x)))
         x = self.layernorm2(x + ff_out)
         return x
 
@@ -85,7 +88,7 @@ class TransformerAutoEncoder(torch.nn.Module):
     def forward(
         self, x: torch.Tensor
     ) -> tuple[list[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        x = torch.nn.functional.relu(self.excite(x))
+        x = F.relu(self.excite(x))
         enc = []
         x = self.divide(x)
         enc[0] = self.encoders[0](x)
@@ -94,6 +97,7 @@ class TransformerAutoEncoder(torch.nn.Module):
         x = self.combine(enc[self.num_encoders - 1])
 
         predicted_mask = self.mask_predictor(x)
+        # single linear layer for decoding
         reconstruction = self.reconstructor(torch.cat([x, predicted_mask], dim=1))
         return enc, (reconstruction, predicted_mask)
 
@@ -180,7 +184,7 @@ def test_swap_noise():
         noisy_x, _ = m.apply(x)
         diffs.append((x != noisy_x).float().mean(0).unsqueeze(0))
 
-    print("specified : ", probas, " - actual : ", torch.cat(diffs, 0).mean(0))
+    logger.info("specified : ", probas, " - actual : ", torch.cat(diffs, 0).mean(0))
 
 
 if __name__ == "__main__":

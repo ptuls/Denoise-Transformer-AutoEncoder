@@ -58,7 +58,7 @@ That is: for every single input going through the network, there are a good amou
 
 I think this is good enough for me to be comfortable with my hypothesis. The network developed [expertized sub-networks](https://www.cs.toronto.edu/~hinton/csc321/notes/lec15.pdf), without been explicitly told to do so via a gating mechanism. 
 
-### How noise change things
+### How noise changes things
 Next, I looked at the effect of applying swap noise, to see how it changes the activations.
 ![activations for input with nosie 1](assets/ac1.png)  
 
@@ -72,7 +72,7 @@ I take this as:
 
 I think the network here developed(and it should) connections vaguely correspond to the different conditioning. By which, I mean connections that models `P(x_i | x_j, x_k,...x_z)` where `x_i` is the corrupted input. A different corruption will activate different such connections in the network. So the network is sort of like an ensemble of [MADE models](https://arxiv.org/pdf/1502.03509.pdf). 
 
-## Enters transformer encoders
+## Enter transformer encoders
 All the above is good. But realistically, there will never be crystal clear cut clusters, and there will never be 100% confidence about which conditioning is the best to use. 
 
 Thus, each data point should be considered by multiple clusters, and multiple conditioning should be activated, and all those can be pooled and distilled in stages. 
