@@ -62,7 +62,7 @@ class TransformerAutoEncoder(torch.nn.Module):
         dropout: float = 0.0,
         feedforward_dim: int = 512,
         emphasis: float = 0.75,
-        task_weights: List[int, int] = [10, 14],
+        task_weights: List[int] = [10, 14],
         mask_loss_weight: float = 2,
         num_encoders: int = 3,
     ):
@@ -167,7 +167,6 @@ def test_dae_model():
         5,
         2,
         3,
-        num_encoders=3,
         hidden_size=16,
         num_subspaces=4,
         embed_dim=4,
@@ -175,6 +174,7 @@ def test_dae_model():
         dropout=0.1,
         feedforward_dim=4,
         emphasis=0.75,
+        num_encoders=3,
     )
 
     x = torch.cat([torch.randint(0, 2, (5, 2)), torch.rand((5, 3))], dim=1)
