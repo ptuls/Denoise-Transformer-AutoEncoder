@@ -27,38 +27,64 @@ class TransformerEncoder(torch.nn.Module):
         return x
 
 
+class SequentialTransformerEncoder(torch.nn.Module):
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float,
+        feedforward_dim: int,
+        num_encoders: int,
+    ):
+        super().__init__()
+        self.encoder = torch.nn.Sequential(
+            *[
+                TransformerEncoder(embed_dim, num_heads, dropout, feedforward_dim)
+                for _ in range(num_encoders)
+            ]
+        )
+
+    def forward(self, x: torch.Tensor):
+        out = self.encoder(x)
+        return out
+
+
 class TransformerAutoEncoder(torch.nn.Module):
     def __init__(
         self,
-        num_inputs,
-        n_cats,
-        n_nums,
-        hidden_size=1024,
-        num_subspaces=8,
-        embed_dim=128,
-        num_heads=8,
-        dropout=0,
-        feedforward_dim=512,
-        emphasis=0.75,
-        task_weights=[10, 14],
-        mask_loss_weight=2,
+        num_inputs: int,
+        n_cats: int,
+        n_nums: int,
+        hidden_size: int = 1024,
+        num_subspaces: int = 8,
+        embed_dim: int = 128,
+        num_heads: int = 8,
+        dropout: float = 0.0,
+        feedforward_dim: int = 512,
+        emphasis: float = 0.75,
+        task_weights: List[int, int] = [10, 14],
+        mask_loss_weight: float = 2,
+        num_encoders: int = 3,
     ):
         super().__init__()
-        assert hidden_size == embed_dim * num_subspaces
+        if hidden_size != embed_dim * num_subspaces:
+            raise ValueError("hidden_size must be equal to embed_dim * num_subspaces")
+
         self.n_cats = n_cats
         self.n_nums = n_nums
         self.num_subspaces = num_subspaces
         self.num_heads = num_heads
         self.embed_dim = embed_dim
         self.emphasis = emphasis
+
         self.task_weights = np.array(task_weights) / sum(task_weights)
         self.mask_loss_weight = mask_loss_weight
 
+        self.num_encoders = num_encoders
         self.excite = torch.nn.Linear(in_features=num_inputs, out_features=hidden_size)
-        self.encoder_1 = TransformerEncoder(embed_dim, num_heads, dropout, feedforward_dim)
-        self.encoder_2 = TransformerEncoder(embed_dim, num_heads, dropout, feedforward_dim)
-        self.encoder_3 = TransformerEncoder(embed_dim, num_heads, dropout, feedforward_dim)
-
+        self.encoders = SequentialTransformerEncoder(
+            embed_dim, num_heads, dropout, feedforward_dim, num_encoders
+        )
         self.mask_predictor = torch.nn.Linear(in_features=hidden_size, out_features=num_inputs)
         self.reconstructor = torch.nn.Linear(
             in_features=hidden_size + num_inputs, out_features=num_inputs
@@ -78,14 +104,12 @@ class TransformerAutoEncoder(torch.nn.Module):
         x = torch.nn.functional.relu(self.excite(x))
 
         x = self.divide(x)
-        x1 = self.encoder_1(x)
-        x2 = self.encoder_2(x1)
-        x3 = self.encoder_3(x2)
-        x = self.combine(x3)
+        x_enc = self.encoders(x)
+        x = self.combine(x_enc)
 
         predicted_mask = self.mask_predictor(x)
         reconstruction = self.reconstructor(torch.cat([x, predicted_mask], dim=1))
-        return (x1, x2, x3), (reconstruction, predicted_mask)
+        return x_enc, (reconstruction, predicted_mask)
 
     def split(self, t):
         return torch.split(t, [self.n_cats, self.n_nums], dim=1)
@@ -119,7 +143,7 @@ class TransformerAutoEncoder(torch.nn.Module):
         )
 
 
-class SwapNoiseMasker(object):
+class SwapNoiseMasker:
     def __init__(self, probas: np.array):
         self.probas = torch.from_numpy(np.array(probas))
 
